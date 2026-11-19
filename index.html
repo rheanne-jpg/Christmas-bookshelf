@@ -72,6 +72,33 @@
   .ghp__card .n{font-family:'GaretBook',sans-serif;font-size:13px;color:#323232}
   .ghp__card .b{font-size:18px;line-height:1.45;margin-top:8px;color:#323232}
 
+
+  /* ---- big scrollable bookshelf ---- */
+  .ghp-lib,.ghp-lib *{box-sizing:border-box}
+  .ghp-lib{position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;background:#15301f;display:flex;flex-direction:column;font-family:'Bookmania',Georgia,serif;color:#fbfbfb}
+  .ghp-lib__bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 32px;flex:0 0 auto}
+  .ghp-lib__title{margin:0;font-family:'GaretHeavy',sans-serif;font-weight:400;font-size:24px}
+  .ghp-lib__close{height:44px;padding:0 22px;border:0;border-radius:999px;background:#fefae0;color:#323232;font-family:'GaretHeavy',sans-serif;font-size:14px;cursor:pointer}
+  .ghp-lib__close:focus-visible,.ghp-lib__back:focus-visible,.ghp-lib__book:focus-visible{outline:2px solid #D1DF7F;outline-offset:3px}
+  .ghp-lib__scroll{flex:1 1 auto;overflow-y:auto;padding:16px 32px 80px;-webkit-overflow-scrolling:touch}
+  .ghp-lib__inner{max-width:1240px;margin:0 auto}
+  .ghp-lib__shelf{margin-bottom:36px}
+  .ghp-lib__row{display:flex;align-items:flex-end;gap:8px;height:270px;padding:0 12px}
+  .ghp-lib__board{height:14px;border-radius:7px;background:#fefae0;box-shadow:0 10px 20px rgba(0,0,0,.35)}
+  .ghp-lib__book{flex:0 0 auto;position:relative;width:var(--w);height:var(--h);border:0;padding:0;border-radius:10px;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(50,50,50,.1);transition:transform .25s cubic-bezier(.3,.7,.2,1)}
+  .ghp-lib__book:hover,.ghp-lib__book:focus-visible,.ghp-lib__book.pulled{transform:translateY(-16px)}
+  .ghp-lib__book .v{position:absolute;left:0;right:0;top:0;padding-top:14px;display:flex;justify-content:center}
+  .ghp-lib__book .v span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:'GaretBook',sans-serif;font-size:13px;letter-spacing:.04em;white-space:nowrap;max-height:calc(var(--h) - 24px);overflow:hidden}
+  .ghp-lib__empty{font-size:20px;color:#f1f4e1;text-align:center;padding:80px 0}
+  .ghp-lib__pick{position:absolute;left:0;top:0;right:0;bottom:0;background:rgba(10,24,16,.74);display:flex;align-items:center;justify-content:center;padding:20px;perspective:1200px}
+  .ghp-lib__card{width:min(380px,100%);min-height:min(460px,80vh);border-radius:6px 16px 16px 6px;padding:36px 32px 32px 52px;display:flex;flex-direction:column;box-shadow:inset 18px 0 0 rgba(0,0,0,.14),0 24px 60px rgba(0,0,0,.45);transform-origin:left center;animation:ghpPull .5s cubic-bezier(.2,.8,.2,1) both}
+  .ghp-lib__card .n{font-family:'GaretBook',sans-serif;font-size:14px}
+  .ghp-lib__card .b{font-family:'Bookmania',Georgia,serif;font-size:24px;line-height:1.45;margin-top:16px}
+  .ghp-lib__back{margin-top:auto;align-self:flex-start;height:44px;padding:0 22px;border-radius:999px;border:1.5px solid currentColor;background:transparent;color:inherit;font-family:'GaretHeavy',sans-serif;font-size:14px;cursor:pointer}
+  .ghp-lib__card .b+.ghp-lib__back{margin-top:auto}
+  @keyframes ghpPull{from{opacity:0;transform:translateY(80px) rotateY(-75deg) scale(.7)}to{opacity:1;transform:none}}
+  @media (max-width:640px){.ghp-lib__bar{padding:16px 20px}.ghp-lib__scroll{padding:8px 16px 80px}.ghp-lib__row{height:250px}}
+  @media (prefers-reduced-motion:reduce){.ghp-lib__card{animation:none}.ghp-lib__book{transition:none}}
   @media (max-width:640px){
     .ghp__in{padding:0 20px}
     .ghp__h1{font-size:36px}
@@ -237,20 +264,105 @@
     }
     openSpine(spines[Math.min(2,Math.max(0,shown.length-1))]);
   }
-  $('[data-pull]').addEventListener('click',function(){
-    if(!entries.length){openSpine(spines[0]);return;}
-    var onShelf=spines.filter(function(s){return s._entry;});
-    var shownSet=onShelf.map(function(s){return s._entry;});
-    var rest=entries.filter(function(e){return shownSet.indexOf(e)<0;});
-    if(rest.length){
-      var target=pick(spines.filter(function(s){return s!==current;}),1)[0];
-      fill(target,pick(rest,1)[0],spines.indexOf(target));
-      openSpine(target);
-    }else{
-      var others=onShelf.filter(function(s){return s!==current;});
-      openSpine(pick(others.length?others:onShelf,1)[0]);
+  /* ---------- big scrollable bookshelf ---------- */
+  var lib=null, libTrigger=null, prevOverflow='', resizeT=null;
+  var BW=[34,40,46,52,38,44,48,36], BH=[170,200,230,190,215,180,240,205];
+
+  function closePick(){
+    if(lib&&lib._pick){
+      lib._pick.parentNode.removeChild(lib._pick); lib._pick=null;
+      if(lib._from&&lib._from.focus) lib._from.focus({preventScroll:true});
     }
-  });
+  }
+  function pickBook(entry,col,btn){
+    closePick();
+    var o=document.createElement('div'); o.className='ghp-lib__pick';
+    var card=document.createElement('div'); card.className='ghp-lib__card';
+    card.style.background=col[0]; card.style.color=col[1];
+    var n=document.createElement('div'); n.className='n'; n.textContent=entry.name+(entry.place?' \u00b7 '+entry.place:'');
+    var b=document.createElement('div'); b.className='b'; b.textContent=entry.blessing||'';
+    var back=document.createElement('button'); back.type='button'; back.className='ghp-lib__back'; back.textContent='Put it back';
+    back.addEventListener('click',closePick);
+    card.appendChild(n); card.appendChild(b); card.appendChild(back); o.appendChild(card);
+    o.addEventListener('click',function(ev){if(ev.target===o) closePick();});
+    lib.appendChild(o); lib._pick=o; lib._from=btn; back.focus();
+  }
+  function buildLibrary(){
+    var inner=lib._inner; inner.innerHTML=''; lib._books=[];
+    var list=entries.slice().sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+    if(!list.length){
+      var p=document.createElement('p'); p.className='ghp-lib__empty';
+      p.textContent='No books yet. Be the first to add yours.'; inner.appendChild(p); return;
+    }
+    var avail=Math.max(200,inner.clientWidth-24), used=0, rowEl=null;
+    list.forEach(function(e,i){
+      var w=BW[i%BW.length], h=BH[(i*3+1)%BH.length];
+      if(!rowEl||used+w>avail){
+        var shelfEl=document.createElement('div'); shelfEl.className='ghp-lib__shelf';
+        rowEl=document.createElement('div'); rowEl.className='ghp-lib__row';
+        var board=document.createElement('div'); board.className='ghp-lib__board';
+        shelfEl.appendChild(rowEl); shelfEl.appendChild(board); inner.appendChild(shelfEl); used=0;
+      }
+      used+=w+8;
+      var col=COLORS[i%COLORS.length];
+      var btn=document.createElement('button'); btn.type='button'; btn.className='ghp-lib__book';
+      btn.style.setProperty('--w',w+'px'); btn.style.setProperty('--h',h+'px');
+      btn.style.background=col[0]; btn.style.color=col[1];
+      btn.setAttribute('aria-label','Pick up the book from '+(e.place||e.name));
+      var v=document.createElement('span'); v.className='v';
+      var vs=document.createElement('span'); vs.textContent=cityOf(e.place)||'Reader'; v.appendChild(vs); btn.appendChild(v);
+      btn.addEventListener('click',function(){pickBook(e,col,btn);});
+      rowEl.appendChild(btn); lib._books.push(btn);
+    });
+  }
+  function onLibKey(ev){
+    if(ev.key==='Escape'){ if(lib&&lib._pick) closePick(); else closeLibrary(); }
+  }
+  function onLibFocus(ev){
+    if(lib&&!lib.contains(ev.target)) lib._close.focus();
+  }
+  function onLibResize(){
+    clearTimeout(resizeT);
+    resizeT=setTimeout(function(){ if(lib&&!lib._pick) buildLibrary(); },200);
+  }
+  function closeLibrary(){
+    if(!lib) return;
+    document.removeEventListener('keydown',onLibKey);
+    document.removeEventListener('focusin',onLibFocus);
+    window.removeEventListener('resize',onLibResize);
+    lib.parentNode.removeChild(lib); lib=null;
+    document.documentElement.style.overflow=prevOverflow;
+    if(libTrigger&&libTrigger.focus) libTrigger.focus();
+  }
+  function openLibrary(){
+    if(lib) return;
+    libTrigger=document.activeElement;
+    lib=document.createElement('div'); lib.className='ghp-lib';
+    lib.setAttribute('role','dialog'); lib.setAttribute('aria-modal','true'); lib.setAttribute('aria-label','The Christmas Bookshelf');
+    var bar=document.createElement('div'); bar.className='ghp-lib__bar';
+    var t=document.createElement('h2'); t.className='ghp-lib__title'; t.textContent='The Christmas Bookshelf';
+    var x=document.createElement('button'); x.type='button'; x.className='ghp-lib__close'; x.textContent='Close';
+    x.addEventListener('click',closeLibrary);
+    bar.appendChild(t); bar.appendChild(x);
+    var sc=document.createElement('div'); sc.className='ghp-lib__scroll';
+    var inner=document.createElement('div'); inner.className='ghp-lib__inner'; sc.appendChild(inner);
+    lib.appendChild(bar); lib.appendChild(sc);
+    lib._inner=inner; lib._close=x;
+    document.body.appendChild(lib);
+    prevOverflow=document.documentElement.style.overflow; document.documentElement.style.overflow='hidden';
+    document.addEventListener('keydown',onLibKey);
+    document.addEventListener('focusin',onLibFocus);
+    window.addEventListener('resize',onLibResize);
+    buildLibrary();
+    x.focus();
+    if(lib._books&&lib._books.length){
+      var r=lib._books[Math.floor(Math.random()*lib._books.length)];
+      r.classList.add('pulled');
+      r.scrollIntoView({block:'center'});
+      setTimeout(function(){r.classList.remove('pulled');},3500);
+    }
+  }
+  $('[data-pull]').addEventListener('click',openLibrary);
 
   /* ---------- counters and newly shelved ---------- */
   function renderStats(){
